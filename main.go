@@ -1,11 +1,17 @@
 package main
 
 import (
+	"encoding/json"
 	"log"
 	"net/http"
 
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
+)
+
+const (
+	MESSAGE = "MESSAGE"
+	USERID  = "USERID"
 )
 
 var upgrader = websocket.Upgrader{
@@ -14,6 +20,13 @@ var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
 		return true
 	},
+}
+
+// OutputMessage ...
+type OutputMessage struct {
+	Data   string `json:"data"`
+	Sender string `json:"sender"`
+	Type   string `json:"type"`
 }
 
 func roomHandler(sub, unsub chan user, pub chan message) http.HandlerFunc {
@@ -25,6 +38,20 @@ func roomHandler(sub, unsub chan user, pub chan message) http.HandlerFunc {
 		}
 
 		user := newUser()
+		output := OutputMessage{
+			Data:   string(user.id.String()),
+			Sender: user.id.String(),
+			Type:   USERID,
+		}
+		val, err := json.Marshal(output)
+		if err != nil {
+			log.Printf("Failed creating message for user %v\n", user.id)
+			return
+		}
+		//send user back their id
+
+		conn.WriteMessage(websocket.TextMessage, val)
+
 		log.Printf("Made new user: %+v\n", user)
 		sub <- user
 
@@ -33,7 +60,17 @@ func roomHandler(sub, unsub chan user, pub chan message) http.HandlerFunc {
 		go func() {
 			for mess := range user.messages {
 				log.Printf("Waiting for messages for user %v\n", user.id)
-				conn.WriteMessage(mess.messageType, mess.data)
+				output := OutputMessage{
+					Data:   string(mess.data),
+					Sender: mess.sender.id.String(),
+					Type:   MESSAGE,
+				}
+				val, err := json.Marshal(output)
+				if err != nil {
+					log.Printf("Failed creating message for user %v\n", user.id)
+					continue
+				}
+				conn.WriteMessage(mess.messageType, val)
 			}
 		}()
 
