@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"os"
 
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
@@ -92,6 +93,15 @@ func roomHandler(sub, unsub chan user, pub chan message) http.HandlerFunc {
 	}
 }
 
+func getPort() string {
+	port := os.Getenv("PORT")
+	if port == "" {
+		return "localhost:5000"
+	}
+
+	return ":" + port
+}
+
 func main() {
 	sub := make(chan user)
 	pub := make(chan message)
@@ -103,5 +113,5 @@ func main() {
 	r.HandleFunc("/room", roomHandler(sub, unsub, pub))
 
 	log.Println("Starting on port 5000")
-	log.Fatal(http.ListenAndServe("localhost:5000", r))
+	log.Fatal(http.ListenAndServe(getPort(), r))
 }
