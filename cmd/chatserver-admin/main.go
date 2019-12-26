@@ -1,12 +1,15 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"github.com/ardanlabs/conf"
 	"github.com/rtravitz/chatter/database"
 	"github.com/rtravitz/chatter/schema"
+	"github.com/rtravitz/chatter/user"
 	"log"
 	"os"
+	"time"
 )
 
 func main() {
@@ -48,7 +51,25 @@ func run() error {
 		DisableTLS: cfg.DB.DisableTLS,
 	}
 
-	db, err := database.Open(dbConfig)
+	var err error
+	switch cfg.Args.Num(0) {
+	case "migrate":
+		err = migrate(dbConfig)
+	case "useradd":
+		err = useradd(dbConfig, cfg.Args.Num(1), cfg.Args.Num(2))
+	default:
+		err = errors.New("Must specify a command")
+	}
+
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func migrate(cfg database.Config) error {
+	db, err := database.Open(cfg)
 	if err != nil {
 		return err
 	}
@@ -59,5 +80,46 @@ func run() error {
 	}
 
 	fmt.Println("Migrations complete")
+	return nil
+}
+
+func useradd(cfg database.Config, email, password string) error {
+	db, err := database.Open(cfg)
+	if err != nil {
+		return err
+	}
+
+	defer db.Close()
+
+	if email == "" || password == "" {
+		return errors.New("useradd must be called with arguments for username and password")
+	}
+
+	fmt.Printf("user will be created with email %q and password %q\n", email, password)
+
+	fmt.Print("Continue? (1/0) ")
+	var confirm bool
+	if _, err := fmt.Scanf("%t\n", &confirm); err != nil {
+		return err
+	}
+
+	if !confirm {
+		fmt.Println("Canceling")
+		return nil
+	}
+
+	nu := user.NewUser{
+		Email:           email,
+		Password:        password,
+		PasswordConfirm: password,
+	}
+
+	u, err := user.Create(db, nu, time.Now())
+	if err != nil {
+		return err
+	}
+
+	fmt.Println("User created with id:", u.ID)
+
 	return nil
 }
